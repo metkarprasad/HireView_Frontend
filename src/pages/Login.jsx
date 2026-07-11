@@ -51,7 +51,7 @@ const Login = () => {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-medium dark:text-slate-300 text-slate-700 mb-2">
-              Email Address
+              Email Address<span className="text-red-500 font-bold ml-1 cursor-help" title="This field is required">*</span>
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center dark:text-slate-500 text-slate-400">
@@ -72,7 +72,7 @@ const Login = () => {
           <div>
             <div className="flex justify-between items-center mb-2">
               <label className="block text-sm font-medium dark:text-slate-300 text-slate-700">
-                Password
+                Password<span className="text-red-500 font-bold ml-1 cursor-help" title="This field is required">*</span>
               </label>
               <Link
                 to="/forgot-password"

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import {
   Brain,
   Award,
@@ -13,7 +14,9 @@ import {
   HelpCircle,
   FileText,
   AlertTriangle,
-  Play
+  Play,
+  History,
+  Timer
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -48,12 +51,16 @@ const DIFFICULTIES = [
 
 const Dashboard = () => {
   const { apiUrl } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
 
   // Selected config for starting new interview
   const [selectedTech, setSelectedTech] = useState('React');
   const [selectedDiff, setSelectedDiff] = useState('Intermediate');
   const [startLoading, setStartLoading] = useState(false);
+  const [duration, setDuration] = useState(1.0);
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState('');
 
   // Dashboard Stats & History
   const [analytics, setAnalytics] = useState(null);
@@ -85,16 +92,39 @@ const Dashboard = () => {
   };
 
   const handleStartInterview = async () => {
+    if (isScheduled && !scheduledAt) {
+      toast.error('Please specify a date and time for the scheduled interview.');
+      return;
+    }
+    
+    if (isScheduled && new Date(scheduledAt) <= new Date()) {
+      toast.error('Please select a date and time in the future.');
+      return;
+    }
+
     setStartLoading(true);
     try {
       const res = await axios.post(`${apiUrl}/interviews/start`, {
         technology: selectedTech,
-        difficulty: selectedDiff
+        difficulty: selectedDiff,
+        duration: duration,
+        isScheduled: isScheduled,
+        scheduledAt: isScheduled ? scheduledAt : undefined
       });
-      const { interviewId } = res.data;
-      navigate(`/interview/${interviewId}`);
+      
+      if (isScheduled) {
+        toast.success('Interview scheduled successfully! Confirmation email has been sent.');
+        setIsScheduled(false);
+        setScheduledAt('');
+        setDuration(1.0);
+        // Refresh history to show scheduled interview
+        fetchDashboardData();
+      } else {
+        const { interviewId } = res.data;
+        navigate(`/interview/${interviewId}`);
+      }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to start interview session');
+      toast.error(err.response?.data?.message || 'Failed to start/schedule interview session');
     } finally {
       setStartLoading(false);
     }
@@ -130,6 +160,9 @@ const Dashboard = () => {
       name: key,
       value: analytics.difficultyDistribution[key]
     })) : [];
+
+  const upcomingSessions = history.filter(i => i.status === 'scheduled' || i.status === 'started');
+  const completedSessions = history.filter(i => i.status === 'completed');
 
   const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b'];
 
@@ -271,6 +304,70 @@ const Dashboard = () => {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t dark:border-darkBorder border-slate-100">
+            {/* Duration Input */}
+            <div>
+              <span className="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-3">
+                3. Interview Duration
+              </span>
+              <div className="flex items-center gap-4 bg-slate-50 dark:bg-darkBg border dark:border-darkBorder border-slate-200 p-4 rounded-xl">
+                <div className="flex-grow space-y-1">
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="4.0"
+                    step="0.5"
+                    value={duration}
+                    onChange={(e) => setDuration(parseFloat(e.target.value))}
+                    className="w-full accent-indigo-500 cursor-pointer h-2 bg-slate-200 dark:bg-darkBorder rounded-lg appearance-none"
+                  />
+                  <div className="flex justify-between text-[10px] dark:text-slate-500 text-slate-400 font-semibold font-mono">
+                    <span>0.5 hr</span>
+                    <span>2.0 hr</span>
+                    <span>4.0 hr</span>
+                  </div>
+                </div>
+                <div className="text-center bg-indigo-500/10 border border-indigo-500/25 px-4 py-2 rounded-lg shrink-0">
+                  <span className="block text-lg font-bold text-indigo-400 font-mono">{duration}</span>
+                  <span className="block text-[10px] text-indigo-300 font-semibold uppercase tracking-wider">Hours</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Schedule Input */}
+            <div>
+              <span className="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-3">
+                4. Schedule Options
+              </span>
+              <div className="bg-slate-50 dark:bg-darkBg border dark:border-darkBorder border-slate-200 p-4 rounded-xl space-y-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="schedule-toggle"
+                    checked={isScheduled}
+                    onChange={(e) => setIsScheduled(e.target.checked)}
+                    className="w-4 h-4 text-indigo-600 bg-slate-100 border-slate-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-slate-800 dark:bg-slate-700 dark:border-slate-600 cursor-pointer"
+                  />
+                  <label htmlFor="schedule-toggle" className="text-sm font-semibold dark:text-slate-300 text-slate-700 cursor-pointer select-none">
+                    Schedule for a future date/time?
+                  </label>
+                </div>
+                
+                {isScheduled && (
+                  <div className="relative">
+                    <input
+                      type="datetime-local"
+                      value={scheduledAt}
+                      min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                      onChange={(e) => setScheduledAt(e.target.value)}
+                      className="block w-full px-3 py-2 rounded-lg border text-sm outline-none dark:bg-slate-800 dark:border-darkBorder dark:text-white bg-white border-slate-200 text-slate-900 focus:border-indigo-600 dark:focus:border-indigo-500"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-end pt-4 border-t dark:border-darkBorder border-slate-100">
             <button
               onClick={handleStartInterview}
@@ -281,8 +378,12 @@ const Dashboard = () => {
                 <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
               ) : (
                 <>
-                  Start AI Interview Session
-                  <Play className="w-4 h-4 fill-white" />
+                  {isScheduled ? 'Schedule AI Interview' : 'Start AI Interview Session'}
+                  {isScheduled ? (
+                    <Calendar className="w-4 h-4" />
+                  ) : (
+                    <Play className="w-4 h-4 fill-white" />
+                  )}
                 </>
               )}
             </button>
@@ -358,6 +459,71 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Upcoming & Ongoing Sessions */}
+      {upcomingSessions.length > 0 && (
+        <div className="p-6 rounded-2xl border dark:border-darkBorder dark:bg-darkCard bg-white border-lightBorder space-y-6">
+          <h3 className="text-lg font-bold dark:text-white text-slate-900 flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-indigo-500" />
+            Upcoming & Active Scheduled Sessions
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {upcomingSessions.map((session) => (
+              <div key={session._id} className="p-5 rounded-2xl border dark:border-darkBorder dark:bg-darkBg bg-slate-50 border-slate-200 flex flex-col justify-between space-y-4 hover:border-indigo-500/40 transition-colors">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="text-base font-bold dark:text-white text-slate-800">
+                      {session.technology} Interview
+                    </h4>
+                    <p className="text-xs dark:text-slate-400 text-slate-500 font-semibold uppercase tracking-wider mt-0.5">
+                      Difficulty: <span className="text-indigo-400">{session.difficulty}</span>
+                    </p>
+                  </div>
+                  <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider border ${
+                    session.status === 'started'
+                      ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 animate-pulse'
+                      : 'text-indigo-500 bg-indigo-500/10 border-indigo-500/20'
+                  }`}>
+                    {session.status}
+                  </span>
+                </div>
+                
+                <div className="space-y-1.5 text-xs dark:text-slate-400 text-slate-600 font-medium">
+                  {session.isScheduled && session.scheduledAt && (
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-slate-400" />
+                      <span>
+                        Scheduled: {new Date(session.scheduledAt).toLocaleString('en-US', {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true,
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5">
+                    <Timer className="w-4 h-4 text-slate-400" />
+                    <span>Duration: {session.duration || 1.0} hours</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2 border-t dark:border-darkBorder/60 border-slate-200/60">
+                  <button
+                    onClick={() => navigate(`/interview/${session._id}`)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors cursor-pointer"
+                  >
+                    {session.status === 'started' ? 'Resume Interview' : 'Start Session'}
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* History List */}
       <div className="p-6 rounded-2xl border dark:border-darkBorder dark:bg-darkCard bg-white border-lightBorder">
         <h3 className="text-lg font-bold dark:text-white text-slate-900 mb-6 flex items-center gap-2">
@@ -365,7 +531,7 @@ const Dashboard = () => {
           Attempt Logs & Analytics Reports
         </h3>
 
-        {history.length === 0 ? (
+        {completedSessions.length === 0 ? (
           <div className="text-center py-12 border border-dashed dark:border-darkBorder border-slate-200 rounded-xl">
             <HelpCircle className="w-12 h-12 text-slate-400 mx-auto mb-4 animate-bounce" />
             <p className="text-sm font-semibold dark:text-slate-200 text-slate-800">No attempts logged yet</p>
@@ -396,7 +562,7 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody className="divide-y dark:divide-darkBorder divide-slate-100">
-                {history.map((interview) => (
+                {completedSessions.map((interview) => (
                   <tr key={interview._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-all">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold dark:text-white text-slate-900">
                       {interview.technology}

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { useSocket } from '../context/SocketContext';
 import {
   Mic,
   MicOff,
@@ -16,9 +18,12 @@ import {
 const TIMER_SECONDS = 180; // 3 minutes per question
 
 const Interview = () => {
+  const { socket, joinInterview, startInterview, submitAnswer, enabled } = useSocket();
+  const { token } = useAuth(); // ensure token available for socket auth
   const { id } = useParams();
   const navigate = useNavigate();
   const { apiUrl } = useAuth();
+  const toast = useToast();
 
   // Active Session State
   const [session, setSession] = useState(null);
@@ -26,6 +31,7 @@ const Interview = () => {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(5);
   const [answerText, setAnswerText] = useState('');
+  const [attempt, setAttempt] = useState(null);
 
   // Speech Recognition States
   const [isListening, setIsListening] = useState(false);
@@ -42,42 +48,73 @@ const Interview = () => {
 
   // Initialize Speech Recognition
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
+    try {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
 
-      recognition.onresult = (event) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
+        recognition.onresult = (event) => {
+          let interimTranscript = '';
+          let finalTranscript = '';
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript;
+            } else {
+              interimTranscript += event.results[i][0].transcript;
+            }
           }
-        }
 
-        if (finalTranscript) {
-          setAnswerText((prev) => prev + (prev.endsWith(' ') || prev === '' ? '' : ' ') + finalTranscript);
-        }
-      };
+          if (finalTranscript) {
+            setAnswerText((prev) => prev + (prev.endsWith(' ') || prev === '' ? '' : ' ') + finalTranscript);
+          }
+        };
 
-      recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-      };
+        recognition.onerror = (event) => {
+          console.error('Speech recognition error:', event.error);
+          setIsListening(false);
+        };
 
-      recognition.onend = () => {
-        setIsListening(false);
-      };
+        recognition.onend = () => {
+          setIsListening(false);
+        };
 
-      recognitionRef.current = recognition;
+        recognitionRef.current = recognition;
+      }
+    } catch (err) {
+      console.warn('Speech recognition is not supported or failed to initialize:', err);
     }
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleAttempt = (attemptData) => {
+      setAttempt(attemptData);
+    };
+    const handleQuestion = (question) => {
+      setCurrentQuestion(question);
+      setQuestionIndex((prev) => prev + 1);
+    };
+    const handleFeedback = (feedback) => {
+      toast.info(feedback?.message || 'Feedback received');
+    };
+    const handleCompleted = (report) => {
+      navigate(`/history/${id}`);
+    };
+    socket.on('attemptCreated', handleAttempt);
+    socket.on('question', handleQuestion);
+    socket.on('feedback', handleFeedback);
+    socket.on('interviewCompleted', handleCompleted);
+    return () => {
+      socket.off('attemptCreated', handleAttempt);
+      socket.off('question', handleQuestion);
+      socket.off('feedback', handleFeedback);
+      socket.off('interviewCompleted', handleCompleted);
+    };
+  }, [socket, id]);
 
   // Fetch / Resume Session on mount
   useEffect(() => {
@@ -115,7 +152,7 @@ const Interview = () => {
         setLoading(false);
       }
     };
-
+if (enabled && socket && id) { joinInterview(id); startInterview(id); } // Join socket room after session is set
     loadSession();
   }, [id, apiUrl, navigate]);
 
@@ -152,7 +189,7 @@ const Interview = () => {
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
-      alert('Speech Recognition is not supported by your current browser. Please type your response.');
+      toast.warning('Speech Recognition is not supported by your current browser. Please type your response.');
       return;
     }
 
@@ -172,44 +209,28 @@ const Interview = () => {
   const handleManualSubmit = (e) => {
     e.preventDefault();
     if (!answerText.trim()) {
-      alert('Please enter a response before submitting.');
+      toast.error('Please enter a response before submitting.');
       return;
     }
     submitAnswerRequest(answerText.trim());
   };
 
-  const submitAnswerRequest = async (answer) => {
+  const submitAnswerRequest = (answer) => {
     // Stop recording if listening
     if (isListening && recognitionRef.current) {
       recognitionRef.current.stop();
       setIsListening(false);
     }
-
     setSubmitting(true);
     if (timerRef.current) clearInterval(timerRef.current);
-
-    try {
-      const res = await axios.post(`${apiUrl}/interviews/submit`, {
-        interviewId: id,
-        answerText: answer
-      });
-
-      setAnswerText('');
-
-      if (res.data.status === 'completed') {
-        // Session complete! Route to history detail
-        navigate(`/history/${id}`);
-      } else {
-        // Next question loaded
-        setCurrentQuestion(res.data.nextQuestion);
-        setQuestionIndex(res.data.questionIndex);
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Failed to submit answer. Please try again.');
-    } finally {
-      setSubmitting(false);
+    // Emit via socket
+    if (socket) {
+      submitAnswer(id, attempt?.id, answer);
+    } else {
+      console.warn('Socket not available, cannot submit answer');
     }
+    setAnswerText('');
+    setSubmitting(false);
   };
 
   const formatTime = (seconds) => {

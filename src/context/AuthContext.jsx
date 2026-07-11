@@ -3,7 +3,7 @@ import axios from 'axios';
 
 const AuthContext = createContext();
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5635/api';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -51,10 +51,10 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await axios.post(`${API_URL}/auth/login`, { email, password });
       const { token: userToken, user: userData } = res.data;
-      
+
       localStorage.setItem('token', userToken);
       localStorage.setItem('user', JSON.stringify(userData));
-      
+
       setToken(userToken);
       setUser(userData);
       return { success: true };

@@ -1,6 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-darkBg: #090d16;
+  --color-darkCard: #131926;
+  --color-darkBorder: #1f293d;
+  --color-lightBg: #f8fafc;
+  --color-lightCard: #ffffff;
+  --color-lightBorder: #e2e8f0;
+}
+
 body {
   font-family: 'Inter', sans-serif;
   margin: 0;

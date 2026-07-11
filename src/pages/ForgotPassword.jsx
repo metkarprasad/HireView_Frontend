@@ -10,7 +10,7 @@ const ForgotPassword = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [demoToken, setDemoToken] = useState('');
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5635/api';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -87,7 +87,7 @@ const ForgotPassword = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium dark:text-slate-300 text-slate-700 mb-2">
-                Email Address
+                Email Address<span className="text-red-500 font-bold ml-1 cursor-help" title="This field is required">*</span>
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center dark:text-slate-500 text-slate-400">
