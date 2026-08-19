@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext'; // assume you have an auth context that provides JWT token
 
 // Feature flag – read from environment at build time
-const ENABLE_REALTIME = import.meta.env.REACT_APP_ENABLE_REALTIME === 'true';
+const ENABLE_REALTIME = import.meta.env.VITE_ENABLE_REALTIME === 'true';
 
 const SocketContext = createContext(null);
 
@@ -16,7 +16,7 @@ export const SocketProvider = ({ children }) => {
     if (!ENABLE_REALTIME) return; // feature disabled
     if (!token) return; // wait for authentication
 
-    const socketInstance = io(import.meta.env.REACT_APP_SOCKET_URL || 'http://localhost:5000', {
+    const socketInstance = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5635', {
       auth: { token },
       transports: ['websocket'],
     });

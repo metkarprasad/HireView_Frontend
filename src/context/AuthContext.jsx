@@ -18,25 +18,23 @@ export const AuthProvider = ({ children }) => {
     delete axios.defaults.headers.common['Authorization'];
   }
 
-  // Check if token is valid on load
+  // Restore user session from localStorage on load
   useEffect(() => {
-    const initializeAuth = async () => {
+    const initializeAuth = () => {
       if (token) {
-        try {
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          // Get updated profile to verify token validity
-          const res = await axios.get(`${API_URL}/interviews/analytics/dashboard`);
-          // Note: If analytics succeeded, the user token is valid.
-          // We can fetch user from localStorage
-          const storedUser = localStorage.getItem('user');
-          if (storedUser) {
+        // Set axios auth header
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        // Restore user details from localStorage
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          try {
             setUser(JSON.parse(storedUser));
-          } else {
-            // Logged in but user details missing, set mock/placeholder username from token context or call profile
-            setUser({ username: 'Interviewee', email: '' });
+          } catch {
+            // Corrupted storage — clear and re-login
+            logout();
           }
-        } catch (err) {
-          console.error('Session expired or invalid token');
+        } else {
+          // Token exists but no user stored — clear to force re-login
           logout();
         }
       }
@@ -44,7 +42,8 @@ export const AuthProvider = ({ children }) => {
     };
 
     initializeAuth();
-  }, [token]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const login = async (email, password) => {
     setError(null);

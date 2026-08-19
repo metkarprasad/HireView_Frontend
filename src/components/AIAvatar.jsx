@@ -1,8 +1,11 @@
 import React from 'react';
-import Lottie from 'lottie-react';
-import idleAnimation from '../../assets/ai-avatar-idle.json';
-import speakingAnimation from '../../assets/ai-avatar-speaking.json';
-import thinkingAnimation from '../../assets/ai-avatar-thinking.json';
+import LottieModule from 'lottie-react';
+
+// Handle CommonJS/ESM interop edge cases with lottie-react
+const Lottie = LottieModule.default || LottieModule;
+import idleAnimation from '../assets/ai-avatar-idle.json';
+import speakingAnimation from '../assets/ai-avatar-speaking.json';
+import thinkingAnimation from '../assets/ai-avatar-thinking.json';
 
 /**
  * AIAvatar component renders a Lottie animation based on the avatar state.

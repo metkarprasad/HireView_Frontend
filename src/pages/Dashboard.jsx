@@ -121,7 +121,7 @@ const Dashboard = () => {
         fetchDashboardData();
       } else {
         const { interviewId } = res.data;
-        navigate(`/interview/${interviewId}`);
+        navigate(`/live-interview/${interviewId}`);
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to start/schedule interview session');
