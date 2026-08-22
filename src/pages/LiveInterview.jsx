@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import AIInterviewer from '../components/AIInterviewer';
 import CandidateFeed from '../components/CandidateFeed';
+import CodeEditor from '../components/CodeEditor';
 import { Play, Square, FastForward, Power, Video, VideoOff, Volume2 } from 'lucide-react';
 import { ttsService } from '../services/ttsService';
 
@@ -21,6 +22,11 @@ const LiveInterview = () => {
   const [interviewState, setInterviewState] = useState('idle'); // idle | started | completed
   const [attemptId, setAttemptId] = useState(null);
   const [showConfirmEnd, setShowConfirmEnd] = useState(false);
+  const [codingRequired, setCodingRequired] = useState(false);
+  const [codingMetadata, setCodingMetadata] = useState(null);
+  const [endsAt, setEndsAt] = useState(null);
+  const [interviewerConfig, setInterviewerConfig] = useState(null);
+  const [timeRemainingDisplay, setTimeRemainingDisplay] = useState('');
 
   const candidateFeedRef = useRef(null);
 
@@ -37,10 +43,29 @@ const LiveInterview = () => {
     
     const handleAttemptCreated = (attempt) => {
       if (attempt?.id) setAttemptId(attempt.id);
+      if (attempt?.endsAt) setEndsAt(new Date(attempt.endsAt));
+      if (attempt?.interviewerConfig) setInterviewerConfig(attempt.interviewerConfig);
     };
 
     const handleQuestion = (question) => {
-      setCurrentQuestion(question?.text || question);
+      // Question could be an object with metadata now
+      if (typeof question === 'object') {
+        setCurrentQuestion(question.questionText || '');
+        setCodingRequired(question.codingRequired || question.questionType === 'coding');
+        if (question.codingRequired || question.questionType === 'coding') {
+          setCodingMetadata({
+            language: question.language || 'javascript',
+            starterCode: question.starterCode || ''
+          });
+        } else {
+          setCodingMetadata(null);
+        }
+      } else {
+        setCurrentQuestion(question);
+        setCodingRequired(false);
+        setCodingMetadata(null);
+      }
+      
       setInterviewState('started');
       setIsListening(false); // Stop listening when a new question arrives
     };
@@ -64,6 +89,39 @@ const LiveInterview = () => {
     };
   }, [socket, navigate, id, toast]);
 
+  // Timer logic
+  useEffect(() => {
+    if (!endsAt || interviewState === 'completed') return;
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      const diffMs = endsAt.getTime() - now.getTime();
+
+      if (diffMs <= 0) {
+        clearInterval(interval);
+        setTimeRemainingDisplay('00:00');
+        if (interviewState === 'started') {
+          toast.warning('Interview time is up! Generating final report...');
+          setIsListening(false);
+          // If time is up, trigger a submit with what they have (or a skip) to force completion
+          if (socket && attemptId) {
+             socket.emit('submitAnswer', { interviewId: id, attemptId, answer: transcript || '[Time limit reached]' });
+          }
+        }
+        return;
+      }
+
+      const totalSeconds = Math.floor(diffMs / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      setTimeRemainingDisplay(
+        `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+      );
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [endsAt, interviewState, transcript, socket, id, attemptId]);
+
   // Emit transcript to backend when updated (while listening)
   useEffect(() => {
     if (!socket || !isListening) return;
@@ -85,7 +143,7 @@ const LiveInterview = () => {
   };
 
   const handleNextQuestion = () => {
-    if (!transcript.trim()) {
+    if (!transcript.trim() && !codingRequired) {
       toast.warning("Please provide an answer before moving to the next question.");
       return;
     }
@@ -94,6 +152,25 @@ const LiveInterview = () => {
       socket.emit('submitAnswer', { interviewId: id, attemptId, answer: transcript });
       setTranscript(''); // reset for next question
       toast.info('Generating next question...');
+    }
+  };
+
+  const handleCodeSubmit = (code) => {
+    if (!code.trim()) {
+      toast.warning("Please write some code before submitting.");
+      return;
+    }
+    if (socket && attemptId) {
+      socket.emit('submitAnswer', { interviewId: id, attemptId, answer: code });
+      toast.info('Evaluating code and generating next question...');
+    }
+  };
+
+  const handleSkipQuestion = () => {
+    if (socket && attemptId) {
+      socket.emit('skipQuestion', { interviewId: id, attemptId });
+      setTranscript(''); // reset for next question
+      toast.info('Skipping question... Generating new one.');
     }
   };
 
@@ -138,6 +215,13 @@ const LiveInterview = () => {
           <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span>
           Live Session
         </h1>
+        
+        {timeRemainingDisplay && (
+          <div className={`px-4 py-2 rounded-lg font-mono text-lg font-bold shadow-inner ${timeRemainingDisplay.startsWith('0') && parseInt(timeRemainingDisplay.split(':')[1]) < 60 && parseInt(timeRemainingDisplay.split(':')[0]) < 5 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
+            ⏱ {timeRemainingDisplay}
+          </div>
+        )}
+
         <button 
           onClick={handleEndInterview}
           className="flex items-center gap-2 text-sm text-red-400 hover:text-red-300 transition-colors bg-red-500/10 px-4 py-2 rounded-lg border border-red-500/20"
@@ -150,24 +234,36 @@ const LiveInterview = () => {
       {/* Main Video Grids */}
       <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 mb-8">
         <div className="w-full h-full min-h-[400px]">
-          <AIInterviewer question={currentQuestion} avatarState={avatarState} />
+          <AIInterviewer question={currentQuestion} avatarState={avatarState} interviewerConfig={interviewerConfig || {}} />
         </div>
         <div className="w-full h-full min-h-[400px] flex flex-col gap-4">
-          <div className="flex-1 relative rounded-2xl overflow-hidden shadow-lg border border-slate-700 bg-slate-900">
-            <CandidateFeed 
-              ref={candidateFeedRef}
-              interviewId={id} 
-              onTranscript={setTranscript} 
-              isListening={isListening}
-              setIsListening={setIsListening}
-            />
-          </div>
           
-          {/* Transcript Box */}
-          <div className="h-32 bg-slate-900 rounded-xl border border-slate-700 p-4 overflow-y-auto">
-            <h3 className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-2">Live Transcript</h3>
-            <p className="text-slate-300 text-sm">{transcript || <span className="text-slate-600 italic">Waiting for speech...</span>}</p>
-          </div>
+          {codingRequired ? (
+            <CodeEditor 
+              language={codingMetadata?.language}
+              starterCode={codingMetadata?.starterCode}
+              onSubmit={handleCodeSubmit}
+            />
+          ) : (
+            <>
+              <div className="flex-1 relative rounded-2xl overflow-hidden shadow-lg border border-slate-700 bg-slate-900">
+                <CandidateFeed 
+                  ref={candidateFeedRef}
+                  interviewId={id} 
+                  onTranscript={setTranscript} 
+                  isListening={isListening}
+                  setIsListening={setIsListening}
+                />
+              </div>
+              
+              {/* Transcript Box */}
+              <div className="h-32 bg-slate-900 rounded-xl border border-slate-700 p-4 overflow-y-auto">
+                <h3 className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-2">Live Transcript</h3>
+                <p className="text-slate-300 text-sm">{transcript || <span className="text-slate-600 italic">Waiting for speech...</span>}</p>
+              </div>
+            </>
+          )}
+
         </div>
       </div>
 
@@ -211,6 +307,15 @@ const LiveInterview = () => {
               title="Repeat Question"
             >
               <Volume2 className="w-5 h-5" />
+            </button>
+
+            <button 
+              onClick={handleSkipQuestion}
+              disabled={isListening}
+              className="p-3 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-slate-300 transition-colors tooltip"
+              title="Skip Question"
+            >
+              <FastForward className="w-5 h-5" />
             </button>
 
             <button 

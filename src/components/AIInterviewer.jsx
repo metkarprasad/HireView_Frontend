@@ -8,13 +8,16 @@ import { ttsService } from '../services/ttsService';
  * Props:
  *   - question: string – the current question text to display and speak.
  */
-const AIInterviewer = ({ question = '', avatarState = 'idle' }) => {
+const AIInterviewer = ({ question = '', avatarState = 'idle', interviewerConfig = {} }) => {
   // Speak the question whenever it changes.
   useEffect(() => {
     if (question) {
-      ttsService.speak(question);
+      ttsService.speak(question, {
+        voiceURI: interviewerConfig.voiceURI,
+        speed: interviewerConfig.speed
+      });
     }
-  }, [question]);
+  }, [question, interviewerConfig]);
 
   return (
     <div className="ai-interviewer w-full h-full flex flex-col items-center justify-center bg-slate-900 rounded-2xl p-6 shadow-inner border dark:border-slate-700 border-slate-300 relative">
@@ -23,7 +26,7 @@ const AIInterviewer = ({ question = '', avatarState = 'idle' }) => {
       </div>
       
       <div className="flex-1 flex items-center justify-center w-full max-w-sm max-h-64 mb-6">
-        <AIAvatar state={avatarState} />
+        <AIAvatar state={avatarState} avatarConfig={interviewerConfig.avatar} />
       </div>
       
       <div className="question-text w-full text-center bg-slate-800/80 p-4 rounded-xl border border-slate-700 min-h-[4rem] flex items-center justify-center">

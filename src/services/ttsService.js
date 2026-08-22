@@ -6,13 +6,28 @@
  * Future providers can replace this file without changing callers.
  */
 export const ttsService = {
-  speak(text, onEnd) {
+  speak(text, options, onEnd) {
     if (!window.speechSynthesis) {
       console.warn('SpeechSynthesis API not supported');
       if (onEnd) onEnd();
       return;
     }
     const utter = new SpeechSynthesisUtterance(text);
+    
+    // Configure voice if requested
+    if (options && options.voiceURI) {
+      const voices = window.speechSynthesis.getVoices();
+      const selectedVoice = voices.find(v => v.voiceURI === options.voiceURI);
+      if (selectedVoice) {
+        utter.voice = selectedVoice;
+      }
+    }
+    
+    // Configure speed if requested
+    if (options && options.speed) {
+      utter.rate = options.speed;
+    }
+
     utter.onend = () => {
       if (onEnd) onEnd();
     };

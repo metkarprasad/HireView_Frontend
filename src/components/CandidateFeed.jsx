@@ -32,7 +32,6 @@ const CandidateFeed = forwardRef(({ interviewId, onTranscript, isListening, setI
 
     const startCamera = async () => {
       try {
-        console.log('[DEBUG] Starting camera initialization...');
         setLoading(true);
         setError('');
 
@@ -40,14 +39,13 @@ const CandidateFeed = forwardRef(({ interviewId, onTranscript, isListening, setI
           throw new Error('navigator.mediaDevices API is not supported in this browser context (requires HTTPS or localhost).');
         }
 
-        console.log('[DEBUG] Requesting getUserMedia({ video: true, audio: true })...');
         // Request both to trigger browser permission, though we use custom STT
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        console.log('[DEBUG] getUserMedia succeeded. Stream ID:', stream.id);
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, 
+          audio: true 
+        });
         
         if (!isMounted) {
-          console.log('[DEBUG] Component unmounted before promise resolved. Stopping tracks.');
-          // If the component unmounted before the promise resolved, stop the tracks immediately
           stream.getTracks().forEach(track => track.stop());
           return;
         }
@@ -55,14 +53,7 @@ const CandidateFeed = forwardRef(({ interviewId, onTranscript, isListening, setI
         const videoTracks = stream.getVideoTracks();
         const audioTracks = stream.getAudioTracks();
         
-        console.log(`[DEBUG] Found ${videoTracks.length} video tracks and ${audioTracks.length} audio tracks.`);
-        if (videoTracks.length > 0) {
-          console.log('[DEBUG] Video track settings:', videoTracks[0].getSettings());
-          console.log('[DEBUG] Video track label:', videoTracks[0].label);
-          console.log('[DEBUG] Video track readyState:', videoTracks[0].readyState);
-          console.log('[DEBUG] Video track enabled:', videoTracks[0].enabled);
-        } else {
-          console.error('[DEBUG] NO VIDEO TRACKS FOUND IN STREAM!');
+        if (videoTracks.length === 0) {
           throw new Error('Webcam returned a stream with no video tracks.');
         }
 
@@ -72,30 +63,21 @@ const CandidateFeed = forwardRef(({ interviewId, onTranscript, isListening, setI
         // Mute audio track locally to avoid feedback loop, we just need it for permissions/STT
         audioTracks.forEach(track => {
           track.enabled = false;
-          console.log(`[DEBUG] Disabled audio track: ${track.label}`);
         });
 
         if (videoRef.current) {
-          console.log('[DEBUG] videoRef.current is available. Assigning srcObject...');
           videoRef.current.srcObject = stream;
-          console.log('[DEBUG] srcObject assigned. Calling play()...');
-          
           try {
             await videoRef.current.play();
-            console.log('[DEBUG] videoRef.current.play() succeeded! Video should be playing.');
           } catch (playErr) {
-            console.error('[DEBUG] Error playing video directly:', playErr);
             if (isMounted) {
               setError(`Video playback failed: ${playErr.message}. The stream was assigned but could not be played.`);
             }
           }
-        } else {
-          console.error('[DEBUG] videoRef.current IS NULL! The <video> element is not in the DOM.');
         }
         
         setLoading(false);
       } catch (err) {
-        console.error('[DEBUG] Unable to access webcam:', err);
         if (isMounted) {
           setError(`Camera Error: ${err.name} - ${err.message}. Please check browser permissions and ensure no other app is using the camera.`);
           setLoading(false);
@@ -163,27 +145,6 @@ const CandidateFeed = forwardRef(({ interviewId, onTranscript, isListening, setI
         autoPlay 
         playsInline 
         muted 
-        onLoadedMetadata={() => {
-          console.log('[DEBUG] Video onLoadedMetadata fired.');
-          if (videoRef.current) {
-            console.log(`[DEBUG] Video dimensions: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`);
-            if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
-              console.warn('[DEBUG] WARNING: Video dimensions are 0x0. The webcam might be sending an empty/black stream.');
-            }
-            if (videoRef.current.paused) {
-              console.log('[DEBUG] Video is paused on metadata load, attempting to play...');
-              videoRef.current.play().catch(e => console.error('[DEBUG] Video play error on loaded metadata:', e));
-            }
-          }
-        }}
-        onPlaying={() => console.log('[DEBUG] Video onPlaying fired. Video should be visible now.')}
-        onTimeUpdate={() => {
-          // Just a one-time log to confirm frames are advancing
-          if (videoRef.current && videoRef.current.currentTime > 0 && !videoRef.current.dataset.loggedTime) {
-            console.log(`[DEBUG] Video time is updating (currentTime: ${videoRef.current.currentTime}). Frames are being rendered.`);
-            videoRef.current.dataset.loggedTime = 'true';
-          }
-        }}
         className={`absolute inset-0 w-full h-full object-cover z-0 transition-opacity duration-500 ${loading || error || !cameraOn ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}
       />
       

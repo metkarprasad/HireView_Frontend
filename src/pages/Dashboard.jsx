@@ -16,8 +16,12 @@ import {
   AlertTriangle,
   Play,
   History,
-  Timer
+  Timer,
+  UserCircle,
+  Volume2,
+  Shuffle
 } from 'lucide-react';
+import { ttsService } from '../services/ttsService';
 import {
   ResponsiveContainer,
   LineChart,
@@ -55,12 +59,43 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   // Selected config for starting new interview
+  const [interviewType, setInterviewType] = useState('Technical');
   const [selectedTech, setSelectedTech] = useState('React');
   const [selectedDiff, setSelectedDiff] = useState('Intermediate');
+  const [experience, setExperience] = useState(2);
   const [startLoading, setStartLoading] = useState(false);
   const [duration, setDuration] = useState(1.0);
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
+
+  // Interviewer Config State
+  const [voices, setVoices] = useState([]);
+  const [interviewerConfig, setInterviewerConfig] = useState({
+    avatar: 'professional_male',
+    voiceURI: '',
+    region: 'Default',
+    style: 'Professional',
+    speed: 1.0
+  });
+
+  // Load Voices
+  useEffect(() => {
+    const loadVoices = () => {
+      if (window.speechSynthesis) {
+        const availableVoices = window.speechSynthesis.getVoices();
+        setVoices(availableVoices);
+        if (availableVoices.length > 0 && !interviewerConfig.voiceURI) {
+          // Default to first english voice or just first voice
+          const defaultVoice = availableVoices.find(v => v.lang.includes('en')) || availableVoices[0];
+          setInterviewerConfig(prev => ({ ...prev, voiceURI: defaultVoice.voiceURI, region: defaultVoice.lang }));
+        }
+      }
+    };
+    loadVoices();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
 
   // Dashboard Stats & History
   const [analytics, setAnalytics] = useState(null);
@@ -105,11 +140,14 @@ const Dashboard = () => {
     setStartLoading(true);
     try {
       const res = await axios.post(`${apiUrl}/interviews/start`, {
-        technology: selectedTech,
+        interviewType: interviewType,
+        technology: interviewType === 'Technical' ? selectedTech : undefined,
         difficulty: selectedDiff,
+        experience: experience,
         duration: duration,
         isScheduled: isScheduled,
-        scheduledAt: isScheduled ? scheduledAt : undefined
+        scheduledAt: isScheduled ? scheduledAt : undefined,
+        interviewerConfig: interviewerConfig
       });
       
       if (isScheduled) {
@@ -251,33 +289,64 @@ const Dashboard = () => {
           Configure New AI Interview
         </h2>
 
-        {/* Tech Grid */}
-        <div className="space-y-6">
-          <div>
-            <span className="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-3">
-              1. Choose Technology Profile
-            </span>
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
-              {TECHNOLOGIES.map((tech) => (
-                <button
-                  key={tech.id}
-                  onClick={() => setSelectedTech(tech.id)}
-                  className={`p-3 rounded-xl border flex flex-col items-center text-center transition-all ${
-                    selectedTech === tech.id
-                      ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400 scale-[1.02]'
-                      : 'dark:border-darkBorder dark:bg-darkBg dark:text-slate-400 dark:hover:bg-slate-800 bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  <span className="text-sm font-bold">{tech.name}</span>
-                </button>
-              ))}
-            </div>
+        {/* Interview Type Selector */}
+        <div className="mb-8">
+          <span className="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-3">
+            1. Select Interview Type
+          </span>
+          <div className="flex gap-4">
+            <button
+              onClick={() => setInterviewType('Technical')}
+              className={`flex-1 p-4 rounded-xl border font-bold transition-all ${
+                interviewType === 'Technical'
+                  ? 'border-indigo-500 bg-indigo-500/10 text-indigo-500 shadow-md'
+                  : 'dark:border-darkBorder dark:bg-darkBg bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              Technical Interview
+            </button>
+            <button
+              onClick={() => setInterviewType('HR')}
+              className={`flex-1 p-4 rounded-xl border font-bold transition-all ${
+                interviewType === 'HR'
+                  ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500 shadow-md'
+                  : 'dark:border-darkBorder dark:bg-darkBg bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              HR Interview
+            </button>
           </div>
+        </div>
+
+        {/* Tech Grid (Only for Technical) */}
+        <div className="space-y-6">
+          {interviewType === 'Technical' && (
+            <div>
+              <span className="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-3">
+                2. Choose Technology Profile
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
+                {TECHNOLOGIES.map((tech) => (
+                  <button
+                    key={tech.id}
+                    onClick={() => setSelectedTech(tech.id)}
+                    className={`p-3 rounded-xl border flex flex-col items-center text-center transition-all ${
+                      selectedTech === tech.id
+                        ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400 scale-[1.02]'
+                        : 'dark:border-darkBorder dark:bg-darkBg dark:text-slate-400 dark:hover:bg-slate-800 bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="text-sm font-bold">{tech.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Difficulty Cards */}
           <div>
             <span className="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-3">
-              2. Select Experience Tier
+              {interviewType === 'Technical' ? '3' : '2'}. Select Experience Tier
             </span>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {DIFFICULTIES.map((diff) => (
@@ -305,10 +374,39 @@ const Dashboard = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t dark:border-darkBorder border-slate-100">
+            {/* Experience Input */}
+            <div className="md:col-span-2">
+              <span className="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-3">
+                {interviewType === 'Technical' ? '4' : '3'}. Candidate Experience (Years)
+              </span>
+              <div className="flex items-center gap-4 bg-slate-50 dark:bg-darkBg border dark:border-darkBorder border-slate-200 p-4 rounded-xl">
+                <div className="flex-grow space-y-1">
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    step="1"
+                    value={experience}
+                    onChange={(e) => setExperience(parseInt(e.target.value))}
+                    className="w-full accent-indigo-500 cursor-pointer h-2 bg-slate-200 dark:bg-darkBorder rounded-lg appearance-none"
+                  />
+                  <div className="flex justify-between text-[10px] dark:text-slate-500 text-slate-400 font-semibold font-mono">
+                    <span>0 (Fresher)</span>
+                    <span>10 yrs</span>
+                    <span>20+ yrs</span>
+                  </div>
+                </div>
+                <div className="text-center bg-indigo-500/10 border border-indigo-500/25 px-4 py-2 rounded-lg shrink-0">
+                  <span className="block text-lg font-bold text-indigo-400 font-mono">{experience}</span>
+                  <span className="block text-[10px] text-indigo-300 font-semibold uppercase tracking-wider">Years</span>
+                </div>
+              </div>
+            </div>
+
             {/* Duration Input */}
             <div>
               <span className="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-3">
-                3. Interview Duration
+                {interviewType === 'Technical' ? '5' : '4'}. Interview Duration
               </span>
               <div className="flex items-center gap-4 bg-slate-50 dark:bg-darkBg border dark:border-darkBorder border-slate-200 p-4 rounded-xl">
                 <div className="flex-grow space-y-1">
@@ -337,7 +435,7 @@ const Dashboard = () => {
             {/* Schedule Input */}
             <div>
               <span className="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-3">
-                4. Schedule Options
+                {interviewType === 'Technical' ? '6' : '5'}. Schedule Options
               </span>
               <div className="bg-slate-50 dark:bg-darkBg border dark:border-darkBorder border-slate-200 p-4 rounded-xl space-y-3">
                 <div className="flex items-center gap-3">
@@ -368,7 +466,108 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="flex justify-end pt-4 border-t dark:border-darkBorder border-slate-100">
+          <div className="pt-6 border-t dark:border-darkBorder border-slate-100">
+            <span className="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-3 flex items-center gap-2">
+              <UserCircle className="w-5 h-5 text-indigo-500" />
+              {interviewType === 'Technical' ? '7' : '6'}. Custom AI Interviewer
+            </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50 dark:bg-darkBg border dark:border-darkBorder border-slate-200 p-4 rounded-xl">
+              
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Avatar</label>
+                <select
+                  value={interviewerConfig.avatar}
+                  onChange={(e) => setInterviewerConfig({ ...interviewerConfig, avatar: e.target.value })}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-indigo-500"
+                >
+                  <option value="professional_male">Professional Male</option>
+                  <option value="professional_female">Professional Female</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Voice / Accent</label>
+                <select
+                  value={interviewerConfig.voiceURI}
+                  onChange={(e) => {
+                    const selectedVoice = voices.find(v => v.voiceURI === e.target.value);
+                    setInterviewerConfig({ ...interviewerConfig, voiceURI: e.target.value, region: selectedVoice?.lang || 'Default' });
+                  }}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-indigo-500"
+                >
+                  {voices.map((v, i) => (
+                    <option key={i} value={v.voiceURI}>{v.name} ({v.lang})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Speaking Style</label>
+                <select
+                  value={interviewerConfig.style}
+                  onChange={(e) => setInterviewerConfig({ ...interviewerConfig, style: e.target.value })}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-indigo-500"
+                >
+                  <option value="Professional">Professional</option>
+                  <option value="Friendly">Friendly</option>
+                  <option value="Conversational">Conversational</option>
+                  <option value="Strict/Technical">Strict / Technical</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Speaking Speed</label>
+                <select
+                  value={interviewerConfig.speed}
+                  onChange={(e) => setInterviewerConfig({ ...interviewerConfig, speed: parseFloat(e.target.value) })}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-indigo-500"
+                >
+                  <option value={0.8}>Slow (0.8x)</option>
+                  <option value={1.0}>Normal (1.0x)</option>
+                  <option value={1.2}>Fast (1.2x)</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-2 lg:col-span-4 flex gap-3 mt-2">
+                <button
+                  onClick={() => {
+                    ttsService.speak(`Hello, I will be your ${interviewerConfig.style.toLowerCase()} interviewer today.`, {
+                      voiceURI: interviewerConfig.voiceURI,
+                      speed: interviewerConfig.speed
+                    });
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
+                >
+                  <Volume2 className="w-4 h-4" /> Preview Voice
+                </button>
+                <button
+                  onClick={() => {
+                    if (voices.length > 0) {
+                      const randomVoice = voices[Math.floor(Math.random() * voices.length)];
+                      const styles = ['Professional', 'Friendly', 'Conversational', 'Strict/Technical'];
+                      const randomStyle = styles[Math.floor(Math.random() * styles.length)];
+                      const avatars = ['professional_male', 'professional_female'];
+                      const randomAvatar = avatars[Math.floor(Math.random() * avatars.length)];
+                      setInterviewerConfig({
+                        avatar: randomAvatar,
+                        voiceURI: randomVoice.voiceURI,
+                        region: randomVoice.lang,
+                        style: randomStyle,
+                        speed: 1.0
+                      });
+                      toast.info(`Randomized: ${randomStyle} ${randomAvatar.split('_')[1]}`);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
+                >
+                  <Shuffle className="w-4 h-4" /> Randomize
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-4 border-t dark:border-darkBorder border-slate-100 mt-6">
             <button
               onClick={handleStartInterview}
               disabled={startLoading}
@@ -472,7 +671,7 @@ const Dashboard = () => {
                 <div className="flex justify-between items-start">
                   <div>
                     <h4 className="text-base font-bold dark:text-white text-slate-800">
-                      {session.technology} Interview
+                      {session.interviewType === 'HR' ? 'HR Interview' : `${session.technology} Interview`}
                     </h4>
                     <p className="text-xs dark:text-slate-400 text-slate-500 font-semibold uppercase tracking-wider mt-0.5">
                       Difficulty: <span className="text-indigo-400">{session.difficulty}</span>
@@ -565,7 +764,11 @@ const Dashboard = () => {
                 {completedSessions.map((interview) => (
                   <tr key={interview._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-all">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold dark:text-white text-slate-900">
-                      {interview.technology}
+                      {interview.interviewType === 'HR' ? (
+                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> HR Interview</span>
+                      ) : (
+                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-indigo-500"></span> {interview.technology}</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm dark:text-slate-300 text-slate-700">
                       <span className="text-xs font-medium px-2 py-0.5 rounded-full dark:bg-slate-800 bg-slate-100 border dark:border-slate-700 border-slate-200">
