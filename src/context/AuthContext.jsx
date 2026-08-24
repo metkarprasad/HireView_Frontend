@@ -6,9 +6,16 @@ const AuthContext = createContext();
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5635/api';
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token') || null);
-  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState(() => localStorage.getItem('token') || null);
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   // Set default authorization header if token exists
@@ -18,32 +25,20 @@ export const AuthProvider = ({ children }) => {
     delete axios.defaults.headers.common['Authorization'];
   }
 
-  // Restore user session from localStorage on load
+  // Synchronize on mount and token changes
   useEffect(() => {
-    const initializeAuth = () => {
-      if (token) {
-        // Set axios auth header
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        // Restore user details from localStorage
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-          try {
-            setUser(JSON.parse(storedUser));
-          } catch {
-            // Corrupted storage — clear and re-login
-            logout();
-          }
-        } else {
-          // Token exists but no user stored — clear to force re-login
+    if (token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      const storedUser = localStorage.getItem('user');
+      if (storedUser && !user) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch {
           logout();
         }
       }
-      setLoading(false);
-    };
-
-    initializeAuth();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    }
+  }, [token]);
 
   const login = async (email, password) => {
     setError(null);
@@ -58,9 +53,15 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       return { success: true };
     } catch (err) {
+      const code = err.response?.data?.code;
       const msg = err.response?.data?.message || 'Login failed. Please try again.';
       setError(msg);
-      return { success: false, message: msg };
+      return {
+        success: false,
+        code,
+        email: err.response?.data?.email || email,
+        message: msg,
+      };
     }
   };
 
@@ -68,14 +69,12 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       const res = await axios.post(`${API_URL}/auth/signup`, { username, email, password });
-      const { token: userToken, user: userData } = res.data;
-
-      localStorage.setItem('token', userToken);
-      localStorage.setItem('user', JSON.stringify(userData));
-
-      setToken(userToken);
-      setUser(userData);
-      return { success: true };
+      return {
+        success: true,
+        requiresVerification: res.data.requiresVerification,
+        email: res.data.email || email,
+        message: res.data.message,
+      };
     } catch (err) {
       const msg = err.response?.data?.message || 'Registration failed. Please try again.';
       setError(msg);
@@ -83,9 +82,83 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const verifyOtp = async (email, otp, purpose = 'EMAIL_VERIFICATION') => {
+    setError(null);
+    try {
+      const res = await axios.post(`${API_URL}/auth/verify-otp`, { email, otp, purpose });
+      return {
+        success: true,
+        message: res.data.message,
+        resetToken: res.data.resetToken,
+      };
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Verification failed.';
+      setError(msg);
+      return { success: false, message: msg };
+    }
+  };
+
+  const resendOtp = async (email, purpose = 'EMAIL_VERIFICATION') => {
+    setError(null);
+    try {
+      const res = await axios.post(`${API_URL}/auth/resend-otp`, { email, purpose });
+      return {
+        success: true,
+        message: res.data.message,
+      };
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to resend code.';
+      const retryAfter = err.response?.data?.retryAfter;
+      setError(msg);
+      return { success: false, message: msg, retryAfter };
+    }
+  };
+
+  const forgotPassword = async (email) => {
+    setError(null);
+    try {
+      const res = await axios.post(`${API_URL}/auth/forgotpassword`, { email });
+      return {
+        success: true,
+        message: res.data.message,
+        email: res.data.email || email,
+      };
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Password reset request failed.';
+      const retryAfter = err.response?.data?.retryAfter;
+      setError(msg);
+      return { success: false, message: msg, retryAfter };
+    }
+  };
+
+  const resetPassword = async (resetToken, newPassword) => {
+    setError(null);
+    try {
+      const res = await axios.post(`${API_URL}/auth/resetpassword`, { resetToken, newPassword });
+      return {
+        success: true,
+        message: res.data.message,
+      };
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Password reset failed.';
+      setError(msg);
+      return { success: false, message: msg };
+    }
+  };
+
+  const loginWithToken = (userToken, userData) => {
+    localStorage.setItem('token', userToken);
+    localStorage.setItem('user', JSON.stringify(userData));
+    axios.defaults.headers.common['Authorization'] = `Bearer ${userToken}`;
+    setToken(userToken);
+    setUser(userData);
+    setError(null);
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    delete axios.defaults.headers.common['Authorization'];
     setToken(null);
     setUser(null);
   };
@@ -117,10 +190,15 @@ export const AuthProvider = ({ children }) => {
         loading,
         error,
         login,
+        loginWithToken,
         register,
+        verifyOtp,
+        resendOtp,
+        forgotPassword,
+        resetPassword,
         logout,
         updateProfile,
-        apiUrl: API_URL
+        apiUrl: API_URL,
       }}
     >
       {children}

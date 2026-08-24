@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -13,7 +14,7 @@ const LiveInterview = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { socket, joinInterview, startInterview, enabled } = useSocket();
-  const { token } = useAuth();
+  const { token, apiUrl } = useAuth();
   const toast = useToast();
 
   const [currentQuestion, setCurrentQuestion] = useState('');
@@ -184,11 +185,20 @@ const LiveInterview = () => {
     setShowConfirmEnd(true);
   };
 
-  const confirmEndInterview = () => {
+  const confirmEndInterview = async () => {
     setShowConfirmEnd(false);
-    toast.info('Ending interview session...');
+    toast.info('Ending interview session and finalizing report...');
     setIsListening(false);
-    navigate(`/history/${id}`);
+    try {
+      if (socket) {
+        socket.emit('endInterview', { interviewId: id, attemptId });
+      }
+      await axios.post(`${apiUrl}/interviews/${id}/complete`);
+    } catch (err) {
+      console.warn('Error completing interview on end:', err.message);
+    } finally {
+      navigate(`/history/${id}`);
+    }
   };
 
   const toggleCamera = () => {

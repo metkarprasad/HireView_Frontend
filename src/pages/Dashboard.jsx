@@ -54,7 +54,7 @@ const DIFFICULTIES = [
 ];
 
 const Dashboard = () => {
-  const { apiUrl } = useAuth();
+  const { apiUrl, user } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -199,8 +199,23 @@ const Dashboard = () => {
       value: analytics.difficultyDistribution[key]
     })) : [];
 
-  const upcomingSessions = history.filter(i => i.status === 'scheduled' || i.status === 'started');
-  const completedSessions = history.filter(i => i.status === 'completed');
+  const currentUserId = user?.id || user?._id;
+
+  const upcomingSessions = history.filter((i) => {
+    const isStatusMatch = i.status === 'scheduled' || i.status === 'started';
+    if (!isStatusMatch) return false;
+    if (!currentUserId || !i.userId) return isStatusMatch;
+    const itemUserId = typeof i.userId === 'object' ? (i.userId._id || i.userId.id) : i.userId;
+    return String(itemUserId) === String(currentUserId);
+  });
+
+  const completedSessions = history.filter((i) => {
+    const isStatusMatch = i.status === 'completed';
+    if (!isStatusMatch) return false;
+    if (!currentUserId || !i.userId) return isStatusMatch;
+    const itemUserId = typeof i.userId === 'object' ? (i.userId._id || i.userId.id) : i.userId;
+    return String(itemUserId) === String(currentUserId);
+  });
 
   const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b'];
 

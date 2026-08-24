@@ -215,7 +215,7 @@ if (enabled && socket && id) { joinInterview(id); startInterview(id); } // Join 
     submitAnswerRequest(answerText.trim());
   };
 
-  const submitAnswerRequest = (answer) => {
+  const submitAnswerRequest = async (answer) => {
     // Stop recording if listening
     if (isListening && recognitionRef.current) {
       recognitionRef.current.stop();
@@ -223,14 +223,30 @@ if (enabled && socket && id) { joinInterview(id); startInterview(id); } // Join 
     }
     setSubmitting(true);
     if (timerRef.current) clearInterval(timerRef.current);
-    // Emit via socket
-    if (socket) {
-      submitAnswer(id, attempt?.id, answer);
-    } else {
-      console.warn('Socket not available, cannot submit answer');
+
+    try {
+      if (socket && enabled) {
+        submitAnswer(id, attempt?.id, answer);
+      } else {
+        const res = await axios.post(`${apiUrl}/interviews/submit`, {
+          interviewId: id,
+          answerText: answer,
+        });
+        if (res.data.status === 'completed') {
+          navigate(`/history/${id}`);
+          return;
+        }
+        if (res.data.nextQuestion) {
+          setCurrentQuestion(res.data.nextQuestion?.questionText || res.data.nextQuestion);
+          setQuestionIndex((prev) => prev + 1);
+        }
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to submit response');
+    } finally {
+      setAnswerText('');
+      setSubmitting(false);
     }
-    setAnswerText('');
-    setSubmitting(false);
   };
 
   const formatTime = (seconds) => {

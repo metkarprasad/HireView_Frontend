@@ -32,8 +32,23 @@ const HistoryDetail = () => {
   useEffect(() => {
     const fetchDetails = async () => {
       try {
+        setLoading(true);
         const res = await axios.get(`${apiUrl}/interviews/${id}`);
-        setInterview(res.data.interview);
+        let interviewData = res.data.interview;
+
+        // If for any reason the interview status is not completed, auto-complete it to generate report
+        if (interviewData && interviewData.status !== 'completed' && interviewData.questions?.length > 0) {
+          try {
+            const compRes = await axios.post(`${apiUrl}/interviews/${id}/complete`);
+            if (compRes.data.interview) {
+              interviewData = compRes.data.interview;
+            }
+          } catch (compErr) {
+            console.warn('Auto-completion check failed:', compErr.message);
+          }
+        }
+
+        setInterview(interviewData);
         setError('');
       } catch (err) {
         setError('Could not retrieve interview feedback logs.');
@@ -55,9 +70,9 @@ const HistoryDetail = () => {
     return { label: 'Needs Practice', color: 'text-rose-500 bg-rose-500/10 border-rose-500/20' };
   };
 
-  const getQuestionScoreColor = (score) => {
-    if (score >= 8) return 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5';
-    if (score >= 6) return 'text-amber-400 border-amber-500/20 bg-amber-500/5';
+  const getQuestionScoreColor = (percentage) => {
+    if (percentage >= 80) return 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5';
+    if (percentage >= 60) return 'text-amber-400 border-amber-500/20 bg-amber-500/5';
     return 'text-rose-400 border-rose-500/20 bg-rose-500/5';
   };
 
@@ -92,13 +107,18 @@ const HistoryDetail = () => {
     );
   }
 
-  const overallScore = interview.overallFeedback?.score || 0;
+  const overallScore = interview.overallFeedback?.score !== undefined
+    ? Math.round(interview.overallFeedback.score)
+    : (interview.questions?.length > 0 
+        ? Math.round(interview.questions.reduce((sum, q) => sum + (q.feedback?.score || 0), 0) / interview.questions.length) 
+        : 0);
+
   const rating = getScoreRating(overallScore);
 
   // SVG parameters for circle gauge
   const radius = 60;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (overallScore / 100) * circumference;
+  const strokeDashoffset = circumference - (Math.min(100, Math.max(0, overallScore)) / 100) * circumference;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] dark:bg-darkBg bg-lightBg py-8 px-4 transition-colors duration-300">
@@ -122,12 +142,12 @@ const HistoryDetail = () => {
               COMPLETED SESSION REPORT
             </span>
             <h1 className="text-2xl md:text-3xl font-extrabold dark:text-white text-slate-900 mt-2">
-              {interview.technology} Interview Evaluation
+              {interview.interviewType === 'HR' ? 'HR Interview Evaluation' : `${interview.technology} Interview Evaluation`}
             </h1>
             <div className="flex flex-wrap justify-center md:justify-start items-center gap-4 text-xs dark:text-slate-400 text-slate-500 font-semibold">
               <span className="flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5" />
-                {new Date(interview.createdAt).toLocaleDateString('en-US', {
+                {new Date(interview.createdAt || Date.now()).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
                   year: 'numeric'
@@ -135,6 +155,8 @@ const HistoryDetail = () => {
               </span>
               <span>•</span>
               <span className="uppercase tracking-wider">Difficulty: <span className="text-indigo-400">{interview.difficulty}</span></span>
+              <span>•</span>
+              <span className="uppercase tracking-wider">Type: <span className="text-indigo-400">{interview.interviewType}</span></span>
             </div>
           </div>
 
@@ -181,12 +203,16 @@ const HistoryDetail = () => {
               Demonstrated Strengths
             </h3>
             <ul className="space-y-3">
-              {interview.overallFeedback?.strengths?.map((str, idx) => (
-                <li key={idx} className="flex gap-2 text-sm dark:text-slate-300 text-slate-600 leading-relaxed">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                  <span>{str}</span>
-                </li>
-              )) || <li className="text-sm text-slate-500 italic">No specific strengths recorded.</li>}
+              {interview.overallFeedback?.strengths && interview.overallFeedback.strengths.length > 0 ? (
+                interview.overallFeedback.strengths.map((str, idx) => (
+                  <li key={idx} className="flex gap-2 text-sm dark:text-slate-300 text-slate-600 leading-relaxed">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                    <span>{str}</span>
+                  </li>
+                ))
+              ) : (
+                <li className="text-sm text-slate-500 italic">No specific strengths recorded.</li>
+              )}
             </ul>
           </div>
 
@@ -197,12 +223,16 @@ const HistoryDetail = () => {
               Identified Gaps
             </h3>
             <ul className="space-y-3">
-              {interview.overallFeedback?.weakAreas?.map((weak, idx) => (
-                <li key={idx} className="flex gap-2 text-sm dark:text-slate-300 text-slate-600 leading-relaxed">
-                  <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                  <span>{weak}</span>
-                </li>
-              )) || <li className="text-sm text-slate-500 italic">No critical vulnerabilities identified.</li>}
+              {interview.overallFeedback?.weakAreas && interview.overallFeedback.weakAreas.length > 0 ? (
+                interview.overallFeedback.weakAreas.map((weak, idx) => (
+                  <li key={idx} className="flex gap-2 text-sm dark:text-slate-300 text-slate-600 leading-relaxed">
+                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <span>{weak}</span>
+                  </li>
+                ))
+              ) : (
+                <li className="text-sm text-slate-500 italic">No critical vulnerabilities identified.</li>
+              )}
             </ul>
           </div>
         </div>
@@ -225,14 +255,18 @@ const HistoryDetail = () => {
               Core Study Concepts
             </h4>
             <div className="flex flex-wrap gap-2">
-              {interview.overallFeedback?.studyTopics?.map((topic, idx) => (
-                <span
-                  key={idx}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-lg dark:bg-slate-850 dark:border-darkBorder dark:text-indigo-400 bg-indigo-50 border border-indigo-100 text-indigo-700"
-                >
-                  {topic}
-                </span>
-              )) || <span className="text-xs text-slate-500 italic">No study topics suggested.</span>}
+              {interview.overallFeedback?.studyTopics && interview.overallFeedback.studyTopics.length > 0 ? (
+                interview.overallFeedback.studyTopics.map((topic, idx) => (
+                  <span
+                    key={idx}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg dark:bg-slate-850 dark:border-darkBorder dark:text-indigo-400 bg-indigo-50 border border-indigo-100 text-indigo-700"
+                  >
+                    {topic}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-slate-500 italic">No study topics suggested.</span>
+              )}
             </div>
           </div>
 
@@ -243,19 +277,23 @@ const HistoryDetail = () => {
               Roadmap Timeline
             </h4>
             <div className="relative pl-6 border-l dark:border-slate-800 border-slate-200 space-y-6">
-              {interview.overallFeedback?.learningPath?.map((item, idx) => (
-                <div key={idx} className="relative">
-                  {/* Bullet */}
-                  <div className="absolute -left-[30px] top-0.5 w-4 h-4 rounded-full bg-indigo-500 border-4 dark:border-darkCard border-white flex items-center justify-center shadow-sm"></div>
-                  
-                  <div>
-                    <h5 className="text-sm font-bold dark:text-white text-slate-800">{item.step}</h5>
-                    <p className="mt-1 text-xs dark:text-slate-400 text-slate-600 leading-relaxed">
-                      {item.description}
-                    </p>
+              {interview.overallFeedback?.learningPath && interview.overallFeedback.learningPath.length > 0 ? (
+                interview.overallFeedback.learningPath.map((item, idx) => (
+                  <div key={idx} className="relative">
+                    {/* Bullet */}
+                    <div className="absolute -left-[30px] top-0.5 w-4 h-4 rounded-full bg-indigo-500 border-4 dark:border-darkCard border-white flex items-center justify-center shadow-sm"></div>
+                    
+                    <div>
+                      <h5 className="text-sm font-bold dark:text-white text-slate-800">{item.step}</h5>
+                      <p className="mt-1 text-xs dark:text-slate-400 text-slate-600 leading-relaxed">
+                        {item.description}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )) || <p className="text-xs text-slate-500 italic">No roadmap generated.</p>}
+                ))
+              ) : (
+                <p className="text-xs text-slate-500 italic">No roadmap generated.</p>
+              )}
             </div>
           </div>
         </div>
@@ -268,95 +306,107 @@ const HistoryDetail = () => {
           </h3>
 
           <div className="space-y-3">
-            {interview.questions.map((question, idx) => {
-              const isExpanded = expandedIndex === idx;
-              const qScore = question.feedback?.score || 0;
-              const qColor = getQuestionScoreColor(qScore);
+            {interview.questions && interview.questions.length > 0 ? (
+              interview.questions.map((question, idx) => {
+                const isExpanded = expandedIndex === idx;
+                const rawScore = question.feedback?.score ?? 0;
+                const maxScore = question.feedback?.maxScore ?? (rawScore <= 10 && rawScore > 0 ? 10 : (rawScore <= 25 && rawScore > 10 ? 25 : 100));
+                const boundedScore = Math.max(0, Math.min(rawScore, maxScore));
+                const percentage = question.feedback?.percentage !== undefined
+                  ? Math.round(question.feedback.percentage)
+                  : (maxScore > 0 ? Math.round((boundedScore / maxScore) * 100) : 0);
+                const qColor = getQuestionScoreColor(percentage);
 
-              return (
-                <div
-                  key={question._id}
-                  className="rounded-2xl border dark:border-darkBorder dark:bg-darkCard bg-white border-lightBorder overflow-hidden transition-all duration-300"
-                >
-                  {/* Trigger */}
-                  <button
-                    onClick={() => toggleAccordion(idx)}
-                    className="w-full flex items-center justify-between p-5 text-left transition-colors dark:hover:bg-slate-800/20 hover:bg-slate-50"
+                return (
+                  <div
+                    key={question._id || idx}
+                    className="rounded-2xl border dark:border-darkBorder dark:bg-darkCard bg-white border-lightBorder overflow-hidden transition-all duration-300"
                   >
-                    <div className="flex items-center gap-4">
-                      <span className="text-xs font-bold dark:text-slate-500 text-slate-400">
-                        0{idx + 1}
-                      </span>
-                      <p className="text-sm font-bold dark:text-white text-slate-800 line-clamp-1 max-w-[20rem] sm:max-w-lg">
-                        {question.questionText}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded border font-mono ${qColor}`}>
-                        {qScore}/10
-                      </span>
-                      {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                    </div>
-                  </button>
-
-                  {/* Panel Content */}
-                  {isExpanded && (
-                    <div className="px-6 pb-6 pt-2 border-t dark:border-darkBorder border-slate-100 space-y-4 text-sm animate-fadeIn">
-                      <div>
-                        <span className="block text-xs font-semibold dark:text-slate-400 text-slate-500 uppercase tracking-wider mb-1">
-                          Question Prompt
+                    {/* Trigger */}
+                    <button
+                      onClick={() => toggleAccordion(idx)}
+                      className="w-full flex items-center justify-between p-5 text-left transition-colors dark:hover:bg-slate-800/20 hover:bg-slate-50"
+                    >
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs font-bold dark:text-slate-500 text-slate-400 font-mono">
+                          {String(idx + 1).padStart(2, '0')}
                         </span>
-                        <p className="dark:text-slate-200 text-slate-800 leading-relaxed bg-slate-50 dark:bg-darkBg/30 p-3 rounded-lg border dark:border-darkBorder/50 border-slate-100">
+                        <p className="text-sm font-bold dark:text-white text-slate-800 line-clamp-1 max-w-[20rem] sm:max-w-lg">
                           {question.questionText}
                         </p>
                       </div>
 
-                      <div>
-                        <span className="block text-xs font-semibold dark:text-slate-400 text-slate-500 uppercase tracking-wider mb-1">
-                          Your Answer
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded border font-mono ${qColor}`}>
+                          {boundedScore}/{maxScore} ({percentage}%)
                         </span>
-                        <p className="dark:text-slate-300 text-slate-700 leading-relaxed font-mono text-xs whitespace-pre-wrap bg-slate-50 dark:bg-darkBg/50 p-4 rounded-lg border dark:border-darkBorder/50 border-slate-100">
-                          {question.answerText || "(No response recorded)"}
-                        </p>
+                        {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                       </div>
+                    </button>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="p-4 rounded-xl border dark:border-darkBorder dark:bg-darkBg/20 bg-slate-50 border-slate-100 space-y-1">
-                          <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Technical Strengths
+                    {/* Panel Content */}
+                    {isExpanded && (
+                      <div className="px-6 pb-6 pt-2 border-t dark:border-darkBorder border-slate-100 space-y-4 text-sm animate-fadeIn">
+                        <div>
+                          <span className="block text-xs font-semibold dark:text-slate-400 text-slate-500 uppercase tracking-wider mb-1">
+                            Question Prompt
                           </span>
-                          <p className="text-xs dark:text-slate-300 text-slate-600 leading-relaxed pt-1">
-                            {question.feedback?.strengths || 'No specific highlights listed.'}
+                          <p className="dark:text-slate-200 text-slate-800 leading-relaxed bg-slate-50 dark:bg-darkBg/30 p-3 rounded-lg border dark:border-darkBorder/50 border-slate-100">
+                            {question.questionText}
                           </p>
                         </div>
 
-                        <div className="p-4 rounded-xl border dark:border-darkBorder dark:bg-darkBg/20 bg-slate-50 border-slate-100 space-y-1">
-                          <span className="text-xs font-semibold text-rose-500 flex items-center gap-1.5">
-                            <AlertCircle className="w-3.5 h-3.5" />
-                            Weak Areas
+                        <div>
+                          <span className="block text-xs font-semibold dark:text-slate-400 text-slate-500 uppercase tracking-wider mb-1">
+                            Your Answer
                           </span>
-                          <p className="text-xs dark:text-slate-300 text-slate-600 leading-relaxed pt-1">
-                            {question.feedback?.weakAreas || 'No significant errors noted.'}
+                          <p className="dark:text-slate-300 text-slate-700 leading-relaxed font-mono text-xs whitespace-pre-wrap bg-slate-50 dark:bg-darkBg/50 p-4 rounded-lg border dark:border-darkBorder/50 border-slate-100">
+                            {question.answerText || "(No response recorded)"}
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="p-4 rounded-xl border dark:border-darkBorder dark:bg-darkBg/20 bg-slate-50 border-slate-100 space-y-1">
+                            <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Technical Strengths
+                            </span>
+                            <p className="text-xs dark:text-slate-300 text-slate-600 leading-relaxed pt-1">
+                              {question.feedback?.strengths || 'No specific highlights listed.'}
+                            </p>
+                          </div>
+
+                          <div className="p-4 rounded-xl border dark:border-darkBorder dark:bg-darkBg/20 bg-slate-50 border-slate-100 space-y-1">
+                            <span className="text-xs font-semibold text-rose-500 flex items-center gap-1.5">
+                              <AlertCircle className="w-3.5 h-3.5" />
+                              Weak Areas
+                            </span>
+                            <p className="text-xs dark:text-slate-300 text-slate-600 leading-relaxed pt-1">
+                              {question.feedback?.weakAreas || 'No significant errors noted.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Recommended Solution & Core Theory */}
+                        <div className="p-4 rounded-xl border border-indigo-500/10 dark:bg-indigo-500/5 bg-indigo-50/30 space-y-1">
+                          <span className="text-xs font-semibold text-indigo-400 flex items-center gap-1.5">
+                            <Code2 className="w-3.5 h-3.5" />
+                            Recommended Solution & Core Theory
+                          </span>
+                          <p className="text-xs dark:text-slate-300 text-slate-600 leading-relaxed pt-1 whitespace-pre-wrap font-sans">
+                            {question.feedback?.improvements || question.expectedAnswer || 'Review official documentation and core concepts.'}
                           </p>
                         </div>
                       </div>
-
-                      <div className="p-4 rounded-xl border border-indigo-500/10 dark:bg-indigo-500/5 bg-indigo-50/30 space-y-1">
-                        <span className="text-xs font-semibold text-indigo-400 flex items-center gap-1.5">
-                          <Code2 className="w-3.5 h-3.5" />
-                          Recommended Solution & Core Theory
-                        </span>
-                        <p className="text-xs dark:text-slate-300 text-slate-600 leading-relaxed pt-1 whitespace-pre-wrap font-sans">
-                          {question.feedback?.improvements || 'Review documentation files.'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-slate-500 italic p-4 text-center border border-dashed rounded-xl dark:border-darkBorder">
+                No questions recorded for this session.
+              </p>
+            )}
           </div>
         </div>
 

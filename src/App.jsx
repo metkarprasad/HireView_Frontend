@@ -9,6 +9,7 @@ import Navbar from './components/Navbar';
 // Lazy load all pages for code-splitting and load isolation
 const Login = lazy(() => import('./pages/Login'));
 const Signup = lazy(() => import('./pages/Signup'));
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -38,6 +39,8 @@ function App() {
                     {/* Public Routes */}
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
+                    <Route path="/verify-email" element={<VerifyEmail />} />
+                    <Route path="/verify-otp" element={<VerifyEmail />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password/:token" element={<ResetPassword />} />
 

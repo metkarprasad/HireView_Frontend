@@ -1,40 +1,44 @@
 import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { Lock, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Lock, ArrowRight, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 
 const ResetPassword = () => {
   const { token } = useParams();
   const navigate = useNavigate();
+  const { resetPassword } = useAuth();
+
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5635/api';
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     
+    if (password.length < 6) {
+      setErrorMsg('Password must be at least 6 characters.');
+      return;
+    }
+
     if (password !== confirmPassword) {
-      setErrorMsg('Passwords do not match');
+      setErrorMsg('Passwords do not match.');
       return;
     }
 
     setLoading(true);
+    const res = await resetPassword(token, password);
+    setLoading(false);
 
-    try {
-      await axios.put(`${API_URL}/auth/resetpassword/${token}`, { password });
+    if (res.success) {
       setSuccess(true);
       setTimeout(() => {
         navigate('/login');
       }, 3000);
-    } catch (err) {
-      setErrorMsg(err.response?.data?.message || 'Failed to reset password. Token may be expired.');
-    } finally {
-      setLoading(false);
+    } else {
+      setErrorMsg(res.message || 'Failed to reset password. Token may be expired.');
     }
   };
 
