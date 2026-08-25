@@ -15,13 +15,20 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [unverifiedEmail, setUnverifiedEmail] = useState('');
+  const [processingGoogle, setProcessingGoogle] = useState(() => {
+    return new URLSearchParams(window.location.search).has('google_token');
+  });
 
   // Auto-redirect if already logged in and no Google OAuth params are being processed
   useEffect(() => {
-    if (user && !location.search.includes('google_token') && !location.search.includes('error')) {
-      navigate('/', { replace: true });
+    const hasGoogleToken = location.search.includes('google_token');
+    const hasError = location.search.includes('error');
+    const isAuthed = user || localStorage.getItem('token');
+    
+    if (isAuthed && !hasGoogleToken && !hasError) {
+      window.location.replace('/');
     }
-  }, [user, navigate, location.search]);
+  }, [user, location.search]);
 
   // Handle incoming Google OAuth redirects
   useEffect(() => {
@@ -31,6 +38,7 @@ const Login = () => {
     const oauthError = params.get('error');
 
     if (googleToken) {
+      setProcessingGoogle(true);
       let userData = null;
       if (userDataStr) {
         try {
@@ -57,12 +65,13 @@ const Login = () => {
 
       if (userData) {
         loginWithToken(googleToken, userData);
-        navigate('/', { replace: true });
+        window.location.replace('/');
         return;
       }
     }
 
     if (oauthError) {
+      setProcessingGoogle(false);
       if (oauthError === 'google_cancelled') {
         setErrorMsg('Google sign-in was cancelled.');
       } else if (oauthError === 'google_not_configured') {
@@ -71,7 +80,7 @@ const Login = () => {
         setErrorMsg('Unable to sign in with Google. Please try again.');
       }
     }
-  }, [location.search, loginWithToken, navigate]);
+  }, [location.search, loginWithToken]);
 
   const handleGoogleLogin = () => {
     window.location.href = `${apiUrl}/auth/google`;
@@ -99,6 +108,19 @@ const Login = () => {
       setErrorMsg(res.message);
     }
   };
+
+  if (processingGoogle) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 dark:bg-darkBg bg-lightBg transition-colors duration-300">
+        <div className="relative w-16 h-16 mb-4">
+          <div className="absolute top-0 left-0 w-full h-full border-4 border-indigo-500/20 rounded-full"></div>
+          <div className="absolute top-0 left-0 w-full h-full border-4 border-t-indigo-500 rounded-full animate-spin"></div>
+        </div>
+        <h3 className="text-xl font-bold dark:text-white text-slate-800">Signing in with Google...</h3>
+        <p className="text-sm dark:text-slate-400 text-slate-500 mt-2">Setting up your session</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 dark:bg-darkBg bg-lightBg transition-colors duration-300">
