@@ -6,7 +6,7 @@ import { VideoOff, MicOff, AlertCircle } from 'lucide-react';
  * CandidateFeed displays the user's webcam feed and captures live speech.
  * Exposes methods to parent via ref to control mic/camera visually and functionally.
  */
-const CandidateFeed = forwardRef(({ interviewId, onTranscript, isListening, setIsListening }, ref) => {
+const CandidateFeed = forwardRef(({ interviewId, onTranscript, isListening, setIsListening, stream: providedStream }, ref) => {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [loading, setLoading] = useState(true);
@@ -25,10 +25,22 @@ const CandidateFeed = forwardRef(({ interviewId, onTranscript, isListening, setI
     isCameraOn: () => cameraOn
   }));
 
-  // Initialize webcam stream
+  // Attach provided stream or initialize fallback webcam stream
   useEffect(() => {
     let activeStream = null;
     let isMounted = true;
+
+    if (providedStream) {
+      streamRef.current = providedStream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = providedStream;
+        videoRef.current.play().catch((playErr) => {
+          console.warn('Preview video play warning:', playErr);
+        });
+      }
+      setLoading(false);
+      return;
+    }
 
     const startCamera = async () => {
       try {
@@ -39,7 +51,6 @@ const CandidateFeed = forwardRef(({ interviewId, onTranscript, isListening, setI
           throw new Error('navigator.mediaDevices API is not supported in this browser context (requires HTTPS or localhost).');
         }
 
-        // Request both to trigger browser permission, though we use custom STT
         const stream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, 
           audio: true 
@@ -59,11 +70,6 @@ const CandidateFeed = forwardRef(({ interviewId, onTranscript, isListening, setI
 
         streamRef.current = stream;
         activeStream = stream;
-        
-        // Mute audio track locally to avoid feedback loop, we just need it for permissions/STT
-        audioTracks.forEach(track => {
-          track.enabled = false;
-        });
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -88,11 +94,11 @@ const CandidateFeed = forwardRef(({ interviewId, onTranscript, isListening, setI
 
     return () => {
       isMounted = false;
-      if (activeStream) {
+      if (activeStream && !providedStream) {
         activeStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [providedStream]);
 
   // Handle speech recognition start/stop based on isListening prop
   useEffect(() => {

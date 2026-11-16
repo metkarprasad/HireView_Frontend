@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Sun, Moon, LogOut, User, LayoutDashboard, History, Menu, X } from 'lucide-react';
+import { Sun, Moon, LogOut, User, LayoutDashboard, History, Menu, X, Briefcase } from 'lucide-react';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
@@ -69,6 +69,17 @@ const Navbar = () => {
               >
                 <User className="w-4 h-4" />
                 Profile
+              </Link>
+              <Link
+                to="/Jobs"
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  isActive('/Jobs')
+                    ? 'dark:bg-indigo-500/10 dark:text-indigo-400 bg-indigo-50 text-indigo-600'
+                    : 'dark:text-slate-400 dark:hover:text-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                }`}
+              >
+                <Briefcase className="w-4 h-4" />
+                Jobs
               </Link>
             </div>
           )}
@@ -157,6 +168,10 @@ const Navbar = () => {
           >
             <User className="w-5 h-5" />
             Profile
+          </Link>
+          <Link to="/Jobs" onClick ={()=>{setMobileMenuOpen(false)}} className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-base font-medium transition-all ${isActive('/Jobs') ? 'dark:bg-indigo-500/10 dark:text-indigo-400 bg-indigo-50 text-indigo-600' : 'dark:text-slate-400 dark:hover:text-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}>
+            <Briefcase className="w-5 h-5" />
+            Jobs
           </Link>
           <div className="border-t dark:border-darkBorder border-lightBorder pt-3 flex items-center justify-between px-3">
             <div className="flex flex-col">

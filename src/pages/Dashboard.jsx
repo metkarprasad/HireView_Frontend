@@ -41,6 +41,8 @@ const TECHNOLOGIES = [
   { id: 'React', name: 'React.js', color: 'from-cyan-500 to-blue-500', desc: 'Hooks, Virtual DOM, RSCs, Lifecycle' },
   { id: 'Node.js', name: 'Node.js', color: 'from-green-500 to-emerald-600', desc: 'Event Loop, EventEmitters, Streams, Libuv' },
   { id: 'JavaScript', name: 'JavaScript', color: 'from-yellow-400 to-amber-500', desc: 'Closures, Prototypes, Event Loop, ES6+' },
+  { id: 'HTML', name: 'HTML', color: 'from-orange-500 to-amber-500', desc: 'Semantic HTML5, DOM, Forms, Accessibility, SEO' },
+  { id: 'CSS', name: 'CSS', color: 'from-blue-500 to-indigo-500', desc: 'Flexbox, Grid, Responsive Design, Animations, CSS3' },
   { id: 'Python', name: 'Python', color: 'from-blue-600 to-indigo-500', desc: 'Decorators, OOP, Data Structures, Flask' },
   { id: 'Java', name: 'Java', color: 'from-red-500 to-orange-500', desc: 'Multithreading, JVM, OOP, Spring Boot' },
   { id: 'SQL', name: 'SQL Database', color: 'from-purple-500 to-pink-500', desc: 'Joins, Indexes, Query Optimizations, ACID' },
@@ -340,7 +342,7 @@ const Dashboard = () => {
               <span className="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-3">
                 2. Choose Technology Profile
               </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-3">
                 {TECHNOLOGIES.map((tech) => (
                   <button
                     key={tech.id}

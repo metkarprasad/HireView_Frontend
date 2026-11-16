@@ -9,6 +9,8 @@ import CandidateFeed from '../components/CandidateFeed';
 import CodeEditor from '../components/CodeEditor';
 import { Play, Square, FastForward, Power, Video, VideoOff, Volume2 } from 'lucide-react';
 import { ttsService } from '../services/ttsService';
+import { useInterviewRecorder } from '../features/recording/hooks/useInterviewRecorder';
+import RecordingStatus from '../features/recording/components/RecordingStatus';
 
 const LiveInterview = () => {
   const { id } = useParams();
@@ -16,6 +18,22 @@ const LiveInterview = () => {
   const { socket, joinInterview, startInterview, enabled } = useSocket();
   const { token, apiUrl } = useAuth();
   const toast = useToast();
+
+  // Phase 2 & 3: Browser Video Recording Hook with Supabase Storage Upload Queue
+  const {
+    status: recordingStatus,
+    durationSeconds: recordingDuration,
+    chunkCount,
+    totalSizeBytes,
+    uploadStats,
+    error: recordingError,
+    mediaStream,
+    startRecording,
+    stopRecording,
+  } = useInterviewRecorder({
+    attemptOrInterviewId: id,
+    onError: (err) => toast.error(err),
+  });
 
   const [currentQuestion, setCurrentQuestion] = useState('');
   const [transcript, setTranscript] = useState('');
@@ -71,12 +89,17 @@ const LiveInterview = () => {
       setIsListening(false); // Stop listening when a new question arrives
     };
     
-    const handleCompleted = (report) => {
+    const handleCompleted = async (report) => {
       setInterviewState('completed');
-      toast.success('Interview completed! Redirecting to history...');
+      toast.success('Interview completed! Finalizing recording and redirecting to report...');
+      try {
+        await stopRecording();
+      } catch (recErr) {
+        console.warn('Error finalizing recording on complete:', recErr);
+      }
       setTimeout(() => {
         navigate(`/history/${id}`);
-      }, 2000);
+      }, 1500);
     };
 
     socket.on('attemptCreated', handleAttemptCreated);
@@ -88,7 +111,7 @@ const LiveInterview = () => {
       socket.off('question', handleQuestion);
       socket.off('interviewCompleted', handleCompleted);
     };
-  }, [socket, navigate, id, toast]);
+  }, [socket, navigate, id, toast, stopRecording]);
 
   // Timer logic
   useEffect(() => {
@@ -132,10 +155,12 @@ const LiveInterview = () => {
     }
   }, [socket, transcript, id, isListening]);
 
-  const handleStartInterview = () => {
+  const handleStartInterview = async () => {
     setInterviewState('started');
     startInterview(id);
     toast.info('Starting interview...');
+    // Phase 2: Start local browser recording and Phase 1 backend lifecycle
+    await startRecording();
   };
 
   const handleStopListening = () => {
@@ -190,6 +215,8 @@ const LiveInterview = () => {
     toast.info('Ending interview session and finalizing report...');
     setIsListening(false);
     try {
+      // Phase 2: Safely stop local recording and capture final chunk
+      await stopRecording();
       if (socket) {
         socket.emit('endInterview', { interviewId: id, attemptId });
       }
@@ -221,10 +248,20 @@ const LiveInterview = () => {
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-between p-4 md:p-8">
       {/* Header */}
       <div className="w-full max-w-6xl flex justify-between items-center mb-6">
-        <h1 className="text-xl font-bold text-white flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span>
-          Live Session
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span>
+            Live Session
+          </h1>
+          <RecordingStatus
+            status={recordingStatus}
+            durationSeconds={recordingDuration}
+            chunkCount={chunkCount}
+            totalSizeBytes={totalSizeBytes}
+            uploadStats={uploadStats}
+            error={recordingError}
+          />
+        </div>
         
         {timeRemainingDisplay && (
           <div className={`px-4 py-2 rounded-lg font-mono text-lg font-bold shadow-inner ${timeRemainingDisplay.startsWith('0') && parseInt(timeRemainingDisplay.split(':')[1]) < 60 && parseInt(timeRemainingDisplay.split(':')[0]) < 5 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
@@ -260,6 +297,7 @@ const LiveInterview = () => {
                 <CandidateFeed 
                   ref={candidateFeedRef}
                   interviewId={id} 
+                  stream={mediaStream}
                   onTranscript={setTranscript} 
                   isListening={isListening}
                   setIsListening={setIsListening}
